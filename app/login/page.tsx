@@ -1,9 +1,10 @@
-import Image from "next/image";
+import Image from 'next/image'
+
 
 export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-24 bg-quaternary-grey">
-      <p className="text-xl">Hey</p>We ballin' Lato
+        Login
     </main>
-  );
+  )
 }

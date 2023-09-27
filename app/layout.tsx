@@ -1,7 +1,8 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import TopBar from "@/navbar/TopBar";
+import TopBar from "@/components/navbar/TopBar";
+import Footer from "@/components/footer/Footer";
 import { Theme } from "@radix-ui/themes";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -21,6 +22,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <TopBar />
         {children}
+        <Footer/>
       </body>
     </html>
   );

@@ -13,16 +13,17 @@ function NavElement({
 }) {
   const currentPath = usePathname();
   const isActive = paths.includes(currentPath as string);
-
+  console.log(currentPath)
   return (
-    <li
+    <p
       className={`${
         isActive ? "underline underline-offset-8 decoration-seconday-blue" : ""
       } ${className}`}
     >
       {children}
-    </li>
+    </p>
   );
 }
 
 export default NavElement;
+
