@@ -1,37 +1,43 @@
 
 import axios from 'axios';
+import { NextApiRequest, NextApiResponse } from 'next';
 
-export async function POST(request: Request) {
-  try {
-    // Parse request body
-    const { prompt } = await request.json();
-
-    // Validate prompt
-    if (!prompt) {
-      return new Response(JSON.stringify({ error: 'Prompt is required' }), { status: 400 });
-    }
-
-    // Call OpenAI API
-    const openaiResponse = await axios.post(
-      'https://api.openai.com/v1/engines/dall-e-2/completions',
-      {
-        prompt: prompt,
-        n: 1,
-        size: "256x256",
-      },
-      {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    try {
+      const { prompt } = req.body;
+  
+      // Validate prompt
+      if (!prompt) {
+        res.status(400).json({ error: 'Prompt is required' });
+        return;
+      }
+  
+      // Call OpenAI API
+      const openaiResponse = await fetch('https://api.openai.com/v1/engines/dall-e-2/completions', {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `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`
-        }
-      }
-    );
-
-    // Send the response
-    return new Response(JSON.stringify(openaiResponse.data), { status: 200 });
-  } catch (error) {
-    // Handle errors
-    console.error('Error:', error);
-    return new Response(JSON.stringify({ error: 'Internal Server Error' }), { status: 500 });
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          prompt: prompt,
+          n: 1,
+          size: "256x256",
+        }),
+      });
+  
+      const data = await openaiResponse.json();
+  
+      // Set CORS headers
+      res.setHeader('Access-Control-Allow-Origin', '*'); // Adjust this to match your exact origin in production
+      res.setHeader('Access-Control-Allow-Methods', 'POST');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  
+      // Send the response
+      res.status(200).json(data);
+    } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
   }
-}
+  

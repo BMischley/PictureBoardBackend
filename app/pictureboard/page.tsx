@@ -7,10 +7,12 @@ import { Sub } from "@radix-ui/react-navigation-menu";
 import axios from 'axios';
 
 async function fetchImage(prompt: string) {
+  console.log("fetching image for prompt:", prompt)
   try {
     const response = await axios.post('https://picture-board-ai.vercel.app/api/openai', {
       prompt: prompt
     });
+    console.log("response:", response)
     return response.data; // returning the data
   } catch (error) {
     console.error('Error fetching image for prompt:', prompt, error);
