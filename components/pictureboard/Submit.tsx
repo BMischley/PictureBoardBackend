@@ -5,7 +5,7 @@ import { useAuthStore } from "@/stores/AuthStore";
 import PlusIcon from "@/components/misc/PlusIcon";
 import MinusIcon from "@/components/misc/MinusIcon";
 
-function NavElement( {matrix, setMatrix} : {matrix: [[string]], setMatrix: any} ) {
+function NavElement( {matrix, setMatrix} : {matrix: string[][], setMatrix: any} ) {
   const loading = useAuthStore((state) => state.loading);
 
   const addColumn = () => {
