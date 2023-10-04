@@ -8,7 +8,7 @@ import axios from 'axios';
 
 async function fetchImage(prompt: string) {
   try {
-    const response = await axios.post('https://your-project-name.vercel.app/api/openai', {
+    const response = await axios.post('https://picture-board-ai.vercel.app/api/openai', {
       prompt: prompt
     });
     return response.data; // returning the data
