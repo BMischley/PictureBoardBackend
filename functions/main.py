@@ -5,7 +5,7 @@
 from firebase_functions import https_fn, options
 from firebase_admin import initialize_app, firestore, storage
 import os
-import openai
+from openai import OpenAI
 from google.cloud import secretmanager
 import json
 import requests
@@ -67,7 +67,6 @@ def get_openai_key():
 
 
 # Initialize Firestore and Storage
-db = firestore.client()
 
 @https_fn.on_request()
 def generate_image(req: https_fn.Request) -> https_fn.Response:
@@ -77,6 +76,7 @@ def generate_image(req: https_fn.Request) -> https_fn.Response:
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',  # Include Authorization here
     'Access-Control-Max-Age': '3600'
 }
+    db = firestore.client()
 
     if req.method == 'OPTIONS':
         return https_fn.Response('', status=204, headers=headers)
@@ -100,8 +100,11 @@ def generate_image(req: https_fn.Request) -> https_fn.Response:
     if not prompts:
         return https_fn.Response('Prompt is required', status=400, headers=headers)
 
-    openai.api_key = get_openai_key()
+    client = OpenAI(
+    api_key=get_openai_key(),  # this is also the default, it can be omitted
+    )
     print("Got API key")
+    
     prompts_map = {f'{index}': inner for index, inner in enumerate(prompts)}
     print(prompts_map)
     doc_ref, new_doc = db.collection('pictureboards').add({
@@ -110,6 +113,10 @@ def generate_image(req: https_fn.Request) -> https_fn.Response:
         'selfDescription': selfDescription,
         'language': language,
         'useSelfDescription': use_self_description,
+        'style': style['style'],
+        'isBlackAndWhite': style['isBlackAndWhite'],
+        'timestamp': firestore.SERVER_TIMESTAMP,
+        'name': 'Untitled Picture Board'
     })
 
     folder_name = new_doc.id   # Use get() to wait for the operation to complete
@@ -129,16 +136,16 @@ def generate_image(req: https_fn.Request) -> https_fn.Response:
                 # Submit tasks to the executor pool
                 print(style)
                 if(style['style'] == "minimalistic"):
-                    prompt = f"Design a single sticker featuring {prompt}. illustrated in a minamalistic cartoon style with colors and bold outlines, with no background. The characters should be arranged in a coherent scene that captures a cheerful, child-friendly aesthetic. The illustration should capture a sense of fun and be suitable for printing as a sticker for a child-friendly audience."
+                    prompt = f"Design a single sticker featuring {prompt}. illustrated in a minamalistic cartoon style with colors and bold outlines, with solid white background. The characters should be arranged in a coherent scene that captures a cheerful, child-friendly aesthetic. The illustration should capture a sense of fun and be suitable for printing as a sticker for a child-friendly audience."
                 elif(style['style'] == "realistic"):
-                    prompt = f"Design a single sticker featuring {prompt}. Photo-captured in a hyperrealistic style with life-life colors and styling, with no background. The characters should be arranged in a coherent scene that captures a normal life-like scene. The illustration should capture a sense of education and be suitable for printing as a sticker."
+                    prompt = f"Design a single sticker featuring {prompt}. Photo-captured in a hyperrealistic style with life-life colors and styling, with solid white background. The characters should be arranged in a coherent scene that captures a normal life-like scene. The illustration should capture a sense of education and be suitable for printing as a sticker."
                 elif(style['style'] == "cartoon"):
-                    prompt = f"Design a single sticker featuring {prompt}. illustrated in a simplified cartoon style with bright colors and bold outlines, with no background. The characters should be arranged in a coherent scene that captures a cheerful, child-friendly aesthetic. The illustration should capture a sense of fun and be suitable for printing as a sticker for a child-friendly audience."
+                    prompt = f"Design a single sticker featuring {prompt}. illustrated in a simplified cartoon style with bright colors and bold outlines, with solid white background. The characters should be arranged in a coherent scene that captures a cheerful, child-friendly aesthetic. The illustration should capture a sense of fun and be suitable for printing as a sticker for a child-friendly audience."
                 
                 if(style['isBlackAndWhite']):
                     prompt = f"{prompt} no color and in Black and White"
 
-                futures.append(executor.submit(create_image_and_upload, slugified_prompt, prompt, bucket, folder_name))
+                futures.append(executor.submit(create_image_and_upload, client, slugified_prompt, prompt, bucket, folder_name))
         
         # Wait for all futures to complete
         results = [future.result() for future in concurrent.futures.as_completed(futures)]
@@ -147,10 +154,11 @@ def generate_image(req: https_fn.Request) -> https_fn.Response:
     return https_fn.Response(json.dumps({'data': {'uid': folder_name}}), status=200, headers=headers, content_type='application/json')
    
 
-def create_image_and_upload(slugified_prompt, prompt, bucket, doc_id):
+def create_image_and_upload(client,slugified_prompt, prompt, bucket, doc_id):
     try:
-        response = openai.Image.create(prompt=prompt, n=1, size="1024x1024", model="dall-e-3")
-        image_url = response["data"][0]["url"]
+        response = client.images.generate(prompt=prompt, n=1, size="1024x1024", model="dall-e-3")
+        image_url = response.data[0].url
+        print("Response from OpenAI:", response)
         
         image_response = requests.get(image_url)
         if image_response.status_code != 200:
@@ -191,6 +199,7 @@ def regen_image(req: https_fn.Request) -> https_fn.Response:
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',  # Include Authorization here
     'Access-Control-Max-Age': '3600'
 }
+    db = firestore.client()
 
     if req.method == 'OPTIONS':
         return https_fn.Response('', status=204, headers=headers)
@@ -211,7 +220,9 @@ def regen_image(req: https_fn.Request) -> https_fn.Response:
     if not prompt:
         return https_fn.Response('Prompt is required', status=400, headers=headers)
 
-    openai.api_key = get_openai_key()
+    client = OpenAI(
+    api_key=get_openai_key(),  # this is also the default, it can be omitted
+    )
     print("Got API key")
 
     # Access the document using the id then get language, selfDescription, useSelfDescription
@@ -223,6 +234,8 @@ def regen_image(req: https_fn.Request) -> https_fn.Response:
             language = doc_data.get('language')
             selfDescription = doc_data.get('selfDescription')
             useSelfDescription = doc_data.get('useSelfDescription')
+            style = doc_data.get('style')
+            isBlackAndWhite = doc_data.get('isBlackAndWhite')
             # Use these variables as needed
         else:
             return https_fn.Response('Document not found', status=404, headers=headers)
@@ -234,12 +247,22 @@ def regen_image(req: https_fn.Request) -> https_fn.Response:
 
     bucket = storage.bucket()
     slugified_prompt = slugify(prompt)  # You need a function to 'slugify' the prompt
+
 # Delete existing image if necessary
     delete_image(slugified_prompt, bucket, id)  # Make sure this function is properly defined
     # Create and upload the new image
     
+    if(style == "minimalistic"):
+        prompt = f"Design a single sticker featuring {prompt}. illustrated in a minamalistic cartoon style with colors and bold outlines, with no background. The characters should be arranged in a coherent scene that captures a cheerful, child-friendly aesthetic. The illustration should capture a sense of fun and be suitable for printing as a sticker for a child-friendly audience."
+    elif(style == "realistic"):
+        prompt = f"Design a single sticker featuring {prompt}. Photo-captured in a hyperrealistic style with life-life colors and styling, with no background. The characters should be arranged in a coherent scene that captures a normal life-like scene. The illustration should capture a sense of education and be suitable for printing as a sticker."
+    elif(style == "cartoon"):
+        prompt = f"Design a single sticker featuring {prompt}. illustrated in a simplified cartoon style with bright colors and bold outlines, with no background. The characters should be arranged in a coherent scene that captures a cheerful, child-friendly aesthetic. The illustration should capture a sense of fun and be suitable for printing as a sticker for a child-friendly audience."
+                
+    if(isBlackAndWhite):
+        prompt = f"{prompt} no color and in Black and White"
 
-    new_image_url = create_image_and_upload(slugified_prompt, prompt, bucket, id)
+    new_image_url = create_image_and_upload(client, slugified_prompt, prompt, bucket, id)
 
     if new_image_url:
         return https_fn.Response(json.dumps({'data': {'url': new_image_url}}), status=200, headers=headers)
